@@ -1,59 +1,67 @@
 #!/bin/bash
 
-# Function to print usage instructions
+# Function to display usage
 usage() {
-    echo "Usage: $0 /path/to/file.txt [optional: target-cloud-directory] [optional: storage-class]"
+    echo "Usage: $0 /path/to/file [--target-dir DIR]"
+    echo "Options:"
+    echo "  --target-dir DIR        Specify the target directory in the S3 bucket"
     exit 1
 }
 
-# Check if the required argument (file path) is provided
-if [ -z "$1" ]; then
+# Default value for optional parameter
+TARGET_DIR=""
+
+# Parse command-line arguments
+FILE_PATH=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --target-dir)
+            TARGET_DIR="$2"
+            shift 2
+            ;;
+        *)
+            if [ -z "$FILE_PATH" ]; then
+                FILE_PATH="$1"
+            else
+                echo "Error: Unknown argument '$1'"
+                usage
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Check if file path is provided and valid
+if [ -z "$FILE_PATH" ]; then
     echo "Error: File path is required."
     usage
 fi
 
-FILE_PATH=$1
-
-# Check if the file exists
 if [ ! -f "$FILE_PATH" ]; then
     echo "Error: File '$FILE_PATH' not found."
     exit 1
 fi
 
-# Optional arguments
-TARGET_DIR=$2
-STORAGE_CLASS=$3
+# Set your S3 bucket name (Replace 'your-bucket-name' with your actual S3 bucket name)
+BUCKET_NAME="your-bucket-name"
 
-# Check if AWS CLI is installed
-if ! command -v aws &> /dev/null; then
-    echo "Error: AWS CLI not found. Please install AWS CLI to proceed."
-    exit 1
-fi
+# Get the file name from the path
+FILE_NAME=$(basename "$FILE_PATH")
 
-# Ensure AWS credentials are configured
-if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
-    echo "Error: AWS credentials are not set. Please configure your AWS credentials."
-    exit 1
-fi
-
-# Construct the upload command
-UPLOAD_COMMAND="aws s3 cp \"$FILE_PATH\" s3://meshewa254"
-
-# Add optional arguments if provided
-if [ ! -z "$TARGET_DIR" ]; then
-    UPLOAD_COMMAND="$UPLOAD_COMMAND/$TARGET_DIR"
-fi
-
-if [ ! -z "$STORAGE_CLASS" ]; then
-    UPLOAD_COMMAND="$UPLOAD_COMMAND --storage-class $STORAGE_CLASS"
-fi
-
-# Execute the upload command
-echo "Uploading file..."
-if eval $UPLOAD_COMMAND; then
-    echo "Upload successful!"
+# Construct the target S3 path
+if [ -n "$TARGET_DIR" ]; then
+    S3_PATH="s3://$BUCKET_NAME/$TARGET_DIR/$FILE_NAME"
 else
-    echo "Error: Upload failed."
-    exit 1
+    S3_PATH="s3://$BUCKET_NAME/$FILE_NAME"
 fi
 
+# Upload the file to S3 without specifying a storage class
+aws s3 cp "$FILE_PATH" "$S3_PATH" --only-show-errors
+
+# Error handling for upload
+if [ $? -eq 0 ]; then
+    echo "File '$FILE_NAME' uploaded successfully to S3 bucket '$BUCKET_NAME' under '$TARGET_DIR'."
+else
+    echo "Error: Failed to upload file to S3."
+    exit 1
+fi
